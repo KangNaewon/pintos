@@ -88,6 +88,9 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  for(int i = 0; i < 1000000000; i++){
+    ;
+  }
   return -1;
 }
 
@@ -97,6 +100,8 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+
+  // printf("%s: exit(%d)\n", cur->name, cur->status);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -221,11 +226,24 @@ load (const char *file_name, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
+  //TODO: parse file name
+  char *tmp_file_name = (char *)malloc(sizeof(char) * (strlen(file_name) + 1));
+  char *token, *save_ptr;
+  char *parsed_args[70];
+  int cnt = 0;
+  char** argv;
+
+  strlcpy(tmp_file_name, file_name, strlen(file_name) + 1);
+
+  for(token = strtok_r(tmp_file_name, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)){
+    parsed_args[cnt++] = token;
+  }
+
   /* Open executable file. */
-  file = filesys_open (file_name);
+  file = filesys_open (parsed_args[0]);
   if (file == NULL) 
     {
-      printf ("load: %s: open failed\n", file_name);
+      printf ("load: %s: open failed\n", parsed_args[0]);
       goto done; 
     }
 
@@ -304,6 +322,40 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* Set up stack. */
   if (!setup_stack (esp))
     goto done;
+
+  // TODO: setup stack
+  argv = (char **)malloc(sizeof(char *) * cnt);
+  for(int i = cnt - 1; i >= 0; i--){
+    *esp -= strlen(parsed_args[i]) + 1;
+    memcpy(*esp, parsed_args[i], strlen(parsed_args[i]) + 1);
+    argv[i] = *esp;
+  }
+
+  while((uintptr_t)*esp % 4 != 0){
+    *esp -= sizeof(uint8_t);
+    **(uint8_t **)esp = 0;
+  }
+
+  *esp -= sizeof(char *);
+  **(char ***)esp = 0;
+
+  for(int i = cnt - 1; i >= 0; i--){
+    *esp -= sizeof(char *);
+    **(char ***)esp = argv[i];
+  }
+
+  *esp -= sizeof(char *);
+  **(char ***)esp = *esp + sizeof(char *);
+
+  *esp -= sizeof(int);
+  **(int **)esp = cnt;
+
+  *esp -= sizeof(void (*) (void));
+  **(uint32_t **)esp = 0;
+  
+  hex_dump(*esp, *esp, PHYS_BASE - *esp, 1);
+
+  free(argv);
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
