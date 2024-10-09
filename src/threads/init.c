@@ -282,16 +282,6 @@ static void
 run_task (char **argv)
 {
   const char *task = argv[1];
-
-  // char *ret_ptr;
-  // char *nxt_ptr;
-
-  // ret_ptr = strtok_r(task, " ", &nxt_ptr);
-  // while(ret_ptr) {
-  //   printf("%s\n", ret_ptr);
-  //   ret_ptr = strtok_r(NULL, " ", &nxt_ptr);
-  // }
-
   
   printf ("Executing '%s':\n", task);
 #ifdef USERPROG

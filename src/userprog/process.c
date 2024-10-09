@@ -3,7 +3,6 @@
 #include <inttypes.h>
 #include <round.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
@@ -17,6 +16,8 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include <stdlib.h>
+
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -29,6 +30,9 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
+  char *parsed;
+  char *save_ptr;
+  char *tmp_file_name = (char *)malloc(sizeof(char) * (strlen(file_name) + 1));
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -38,8 +42,13 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  strlcpy(tmp_file_name, file_name, strlen(file_name) + 1);
+  parsed = strtok_r(tmp_file_name, " ", &save_ptr);
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (parsed, PRI_DEFAULT, start_process, fn_copy);
+  sema_down(&(thread_current()->exec_lock));
+  if(!thread_current()->has_loaded) return -1;
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -63,6 +72,8 @@ start_process (void *file_name_)
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
+  thread_current()->parent->has_loaded = success;
+  sema_up(&(thread_current()->parent->exec_lock));
   if (!success) 
     thread_exit ();
 
@@ -86,11 +97,24 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-  for(int i = 0; i < 1000000000; i++){
-    ;
+  for(struct list_elem * e = list_begin(&(thread_current()->children)); e != list_end(&(thread_current()->children)); e = list_next(e)){
+    int e_tid = list_entry(e, struct thread, siblings)->tid;
+    
+    if(e_tid != child_tid) continue; 
+    if(list_entry(e, struct thread, siblings)->has_waited) return -1;
+    list_entry(e, struct thread, siblings)->has_waited = true;
+    sema_down(&(list_entry(e, struct thread, siblings)->wait_lock));
+    // while(!list_entry(e, struct thread, siblings)->has_child_exited){
+    //   thread_yield();
+    // }
+    int status = list_entry(e, struct thread, siblings)->exit_status;
+    list_remove(e);
+    sema_up(&(list_entry(e, struct thread, siblings)->mem_lock));
+    return status;
   }
+
   return -1;
 }
 
@@ -100,8 +124,6 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-
-  // printf("%s: exit(%d)\n", cur->name, cur->status);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -353,7 +375,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   *esp -= sizeof(void (*) (void));
   **(uint32_t **)esp = 0;
   
-  hex_dump(*esp, *esp, PHYS_BASE - *esp, 1);
+  //hex_dump(*esp, *esp, PHYS_BASE - *esp, 1);
 
   free(argv);
 

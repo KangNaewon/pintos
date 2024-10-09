@@ -291,6 +291,9 @@ thread_exit (void)
      when it calls thread_schedule_tail(). */
   intr_disable ();
   list_remove (&thread_current()->allelem);
+  sema_up(&(thread_current()->wait_lock));
+  // thread_current()->parent->has_child_exited = true;
+  sema_down(&(thread_current()->mem_lock));
   thread_current ()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
@@ -467,6 +470,18 @@ init_thread (struct thread *t, const char *name, int priority)
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
+
+  //process hierarchy
+  list_init(&(t->children));
+  // printf("%s, %s\n", running_thread()->name, t->name);
+  list_push_back(&(running_thread()->children), &(t->siblings));
+  t->parent = running_thread();
+  sema_init(&(t->wait_lock), 0);
+  sema_init(&(t->exec_lock), 0);
+  sema_init(&(t->mem_lock), 0);
+  t->has_waited = false;
+  t->has_loaded = false;
+  t->has_child_exited = false;
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
