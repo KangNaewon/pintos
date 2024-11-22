@@ -108,6 +108,8 @@ struct thread
     int exit_status;
     int has_child_exited;
     
+    struct file *fd_table[128];
+    
 #endif
 
     /* Owned by thread.c. */

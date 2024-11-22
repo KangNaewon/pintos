@@ -292,9 +292,11 @@ thread_exit (void)
   intr_disable ();
   list_remove (&thread_current()->allelem);
   sema_up(&(thread_current()->wait_lock));
-  // thread_current()->parent->has_child_exited = true;
   sema_down(&(thread_current()->mem_lock));
   thread_current ()->status = THREAD_DYING;
+  // for(int i = 0; i < 128; i++){
+  //   thread_current()->fd_table[i] = NULL;
+  // }
   schedule ();
   NOT_REACHED ();
 }
@@ -482,6 +484,10 @@ init_thread (struct thread *t, const char *name, int priority)
   t->has_waited = false;
   t->has_loaded = false;
   t->has_child_exited = false;
+
+  for(int i = 0; i < 128; i++){
+    t->fd_table[i] = NULL;
+  }
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

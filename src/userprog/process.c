@@ -32,7 +32,7 @@ process_execute (const char *file_name)
   char *fn_copy;
   char *parsed;
   char *save_ptr;
-  char *tmp_file_name = (char *)malloc(sizeof(char) * (strlen(file_name) + 1));
+  char tmp_file_name[256];
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -48,9 +48,14 @@ process_execute (const char *file_name)
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (parsed, PRI_DEFAULT, start_process, fn_copy);
   sema_down(&(thread_current()->exec_lock));
-  if(!thread_current()->has_loaded) return -1;
+
+  // free(tmp_file_name);
+
   if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+    palloc_free_page (fn_copy);
+
+  if(!thread_current()->has_loaded) return -1;
+
   return tid;
 }
 
@@ -106,9 +111,6 @@ process_wait (tid_t child_tid)
     if(list_entry(e, struct thread, siblings)->has_waited) return -1;
     list_entry(e, struct thread, siblings)->has_waited = true;
     sema_down(&(list_entry(e, struct thread, siblings)->wait_lock));
-    // while(!list_entry(e, struct thread, siblings)->has_child_exited){
-    //   thread_yield();
-    // }
     int status = list_entry(e, struct thread, siblings)->exit_status;
     list_remove(e);
     sema_up(&(list_entry(e, struct thread, siblings)->mem_lock));
@@ -141,6 +143,7 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+
 }
 
 /* Sets up the CPU for running user code in the current
@@ -249,7 +252,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   //TODO: parse file name
-  char *tmp_file_name = (char *)malloc(sizeof(char) * (strlen(file_name) + 1));
+  char tmp_file_name[256];
   char *token, *save_ptr;
   char *parsed_args[70];
   int cnt = 0;
@@ -387,6 +390,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);
+
   return success;
 }
 
