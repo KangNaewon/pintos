@@ -17,6 +17,30 @@
 #error TIMER_FREQ <= 1000 recommended
 #endif
 
+// queue for timer_sleep()ed threads
+static struct list queue;
+struct semaphore block_lock;
+
+struct queue_elem {
+	struct thread *thread;
+	int64_t wakeup_tick;
+	struct list_elem elem;
+};
+
+bool priority_greater(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+	struct thread *thread_a = list_entry(a, struct thread, elem);
+	struct thread *thread_b = list_entry(b, struct thread, elem);
+	
+	struct queue_elem *qae = list_entry(a, struct queue_elem, elem);
+	struct queue_elem *qbe = list_entry(b, struct queue_elem, elem);
+	
+	if(qae->wakeup_tick != qbe->wakeup_tick) {
+		return qae->wakeup_tick < qbe->wakeup_tick;
+	}
+	
+	return thread_a->priority > thread_b->priority;
+}
+
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
@@ -37,6 +61,8 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+	list_init(&queue);
+	//sema_init(&block_lock);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -92,8 +118,18 @@ timer_sleep (int64_t ticks)
   int64_t start = timer_ticks ();
 
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+  /*while (timer_elapsed (start) < ticks) 
+    thread_yield ();*/
+	
+	struct queue_elem *new_elem = malloc(sizeof(struct queue_elem));
+	new_elem->thread = thread_current();
+	new_elem->wakeup_tick = start + ticks;
+	list_insert_ordered(&queue, &new_elem->elem, priority_greater, NULL);
+
+	//sema_down(&block_lock);
+	enum intr_level old_level = intr_disable();
+	thread_block();
+	intr_set_level(old_level);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -172,6 +208,21 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+
+	struct list_elem *e = list_begin(&queue);
+
+	while(e != list_end(&queue)) {
+		struct queue_elem *qe = list_entry(e, struct queue_elem, elem);
+
+		if(qe->wakeup_tick <= timer_ticks()) {
+			thread_unblock(qe->thread);
+			e = list_remove(e);
+			//free(qe);
+		}
+		else {
+			e = list_next(e);
+		}
+	}
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

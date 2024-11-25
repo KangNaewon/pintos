@@ -4,7 +4,12 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-#include "synch.h"
+#include "threads/synch.h" /* Project #3. */
+
+#ifndef USERPROG
+/* Project #3. */
+extern bool thread_prior_aging;
+#endif
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -94,7 +99,7 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
-#ifdef USERPROG
+
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
     bool has_waited;
@@ -109,8 +114,9 @@ struct thread
     int has_child_exited;
     
     struct file *fd_table[128];
-    
-#endif
+   
+		int nice;
+		int recent_cpu; 
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -151,5 +157,14 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+bool compare_priority(const struct list_elem *a, const struct list_elem *b, void *aux);
+void thread_preempt(void);
+void thread_aging(void);
+
+void thread_cal_load_avg(void);
+void thread_cal_recent_cpu(void);
+void thread_cal_priority(void);
+void thread_mlfqs_run(void);
 
 #endif /* threads/thread.h */
